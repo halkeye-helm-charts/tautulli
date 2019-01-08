@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,24 +20,60 @@ spec:
         app.kubernetes.io/name: {{ include "tautulli.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+{{- if .Values.persistence.enabled }}
+      initContainers:
+        - name: init-chown-data
+          image: "{{ .Values.chownDataImage.repository }}:{{ .Values.chownDataImage.tag }}"
+          imagePullPolicy: {{ .Values.chownDataImage.pullPolicy }}
+          securityContext:
+            runAsUser: 0
+          command: ["chown", "-R", "{{ .Values.tautulli.uid }}:{{ .Values.tautulli.gid }}", "/config"]
+          volumeMounts:
+            - name: tautulli-config
+              mountPath: /config
+{{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PGID
+              value: {{ .Values.tautulli.gid | quote }}
+            - name: PUID
+              value: {{ .Values.tautulli.uid | quote }}
+            - name: TZ
+              value: {{ .Values.tautulli.tz | quote }}
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 8181
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /
+              path: /auth/login
               port: http
           readinessProbe:
             httpGet:
-              path: /
+              path: /auth/login
               port: http
+          volumeMounts:
+          - name: tautulli-config
+            mountPath: /config
+          - name: etc-timezone
+            mountPath: /etc/timezone:ro
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+      - name: etc-timezone
+        hostPath:
+          path: /etc/localtime
+      - name: tautulli-config
+      {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ template "tautulli.fullname" . }}-config
+      {{- else }}
+        emptyDir: {}
+      {{- end }}
+
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
