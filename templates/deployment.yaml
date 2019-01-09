@@ -20,8 +20,9 @@ spec:
         app.kubernetes.io/name: {{ include "tautulli.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
-{{- if .Values.persistence.enabled }}
+{{- if (.Values.persistence.enabled) or (.Values.getGeoCity.enabled) }}
       initContainers:
+{{- if .Values.persistence.enabled }}
         - name: init-chown-data
           image: "{{ .Values.chownDataImage.repository }}:{{ .Values.chownDataImage.tag }}"
           imagePullPolicy: {{ .Values.chownDataImage.pullPolicy }}
@@ -31,6 +32,16 @@ spec:
           volumeMounts:
             - name: tautulli-config
               mountPath: /config
+{{- end }}
+{{- if .Values.getGeoCity.enabled }}
+        - name: get-city-db
+          image: "{{ .Values.getGeoCity.image.repository }}:{{ .Values.getGeoCity.image.tag }}"
+          imagePullPolicy: {{ .Values.getGeoCity.image.pullPolicy }}
+          command: ["sh", "-c", "curl -s https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz | tar xzf - --strip-components=1 '*/GeoLite2-City.mmdb'"]
+          volumeMounts:
+            - name: tautulli-config
+              mountPath: /config
+{{- end }}
 {{- end }}
       containers:
         - name: {{ .Chart.Name }}

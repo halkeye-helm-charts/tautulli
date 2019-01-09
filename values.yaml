@@ -26,6 +26,13 @@ chownDataImage:
   tag: 1.30.0
   pullPolicy: IfNotPresent
 
+getGeoCity:
+  enabled: false
+  image:
+    repository: busybox
+    tag: 1.30.0
+    pullPolicy: IfNotPresent
+
 ingress:
   enabled: false
   annotations: {}
