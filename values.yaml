@@ -29,8 +29,8 @@ chownDataImage:
 getGeoCity:
   enabled: false
   image:
-    repository: busybox
-    tag: 1.30.0
+    repository: whitfin/geoipupdate
+    tag: latest
     pullPolicy: IfNotPresent
 
 ingress:

@@ -20,6 +20,10 @@ spec:
         app.kubernetes.io/name: {{ include "tautulli.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      {{- if .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml .Values.dnsConfig | nindent 8 }}
+      {{- end }}
 {{- if (.Values.persistence.enabled) or (.Values.getGeoCity.enabled) }}
       initContainers:
 {{- if .Values.persistence.enabled }}
@@ -37,10 +41,12 @@ spec:
         - name: get-city-db
           image: "{{ .Values.getGeoCity.image.repository }}:{{ .Values.getGeoCity.image.tag }}"
           imagePullPolicy: {{ .Values.getGeoCity.image.pullPolicy }}
-          command: ["sh", "-c", "curl -s https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.tar.gz | tar xzf - --strip-components=1 '*/GeoLite2-City.mmdb'"]
+          env:
+            - name: GEOIP_PRODUCT_IDS
+              value: 'GeoLite2-City'
           volumeMounts:
             - name: tautulli-config
-              mountPath: /config
+              mountPath: /usr/local/share/GeoIP
 {{- end }}
 {{- end }}
       containers:
@@ -66,6 +72,8 @@ spec:
             httpGet:
               path: /auth/login
               port: http
+            initialDelaySeconds: 60
+            periodSeconds: 25
           volumeMounts:
           - name: tautulli-config
             mountPath: /config
