@@ -1,0 +1,27 @@
+{{- if .Values.getGeoCity.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "tautulli.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "tautulli.name" . }}
+    helm.sh/chart: {{ include "tautulli.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  GeoIP.conf: |
+    # GeoIP.conf file for `geoipupdate` program, for versions >= 3.1.1.
+    # Used to update GeoIP databases from https://www.maxmind.com.
+    # For more information about this config file, visit the docs at
+    # https://dev.maxmind.com/geoip/geoipupdate/.
+    
+    # `AccountID` is from your MaxMind account.
+    AccountID {{ .Values.getGeoCity.account_id }}
+    
+    # `LicenseKey` is from your MaxMind account
+    LicenseKey {{ .Values.getGeoCity.license_key }}
+    
+    # `EditionIDs` is from your MaxMind account.
+    EditionIDs GeoLite2-City
+
+{{- end }}

@@ -10,12 +10,21 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   replicas: {{ .Values.replicaCount }}
+{{- if .Values.strategy }}
+  strategy:
+{{ toYaml .Values.strategy | indent 4 }}
+{{ if eq .Values.strategy.type "Recreate" }}
+    rollingUpdate: null
+{{- end }}
+{{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "tautulli.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         app.kubernetes.io/name: {{ include "tautulli.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
@@ -42,11 +51,13 @@ spec:
           image: "{{ .Values.getGeoCity.image.repository }}:{{ .Values.getGeoCity.image.tag }}"
           imagePullPolicy: {{ .Values.getGeoCity.image.pullPolicy }}
           env:
-            - name: GEOIP_PRODUCT_IDS
-              value: 'GeoLite2-City'
+            - name: GEOIP_CONFIG_FILE
+              value: "/etc/geoipupdater/GeoIP.conf"
           volumeMounts:
             - name: tautulli-config
               mountPath: /usr/local/share/GeoIP
+            - name: geoip-config
+              mountPath: /etc/geoipupdater/
 {{- end }}
 {{- end }}
       containers:
@@ -68,12 +79,14 @@ spec:
             httpGet:
               path: /auth/login
               port: http
+            initialDelaySeconds: 120
+            periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /auth/login
               port: http
-            initialDelaySeconds: 60
-            periodSeconds: 25
+            initialDelaySeconds: 120
+            periodSeconds: 20
           volumeMounts:
           - name: tautulli-config
             mountPath: /config
@@ -85,6 +98,11 @@ spec:
       - name: etc-timezone
         hostPath:
           path: /etc/localtime
+      {{- if .Values.getGeoCity.enabled }}
+      - name: geoip-config
+        configMap:
+          name: {{ template "tautulli.fullname" . }}
+      {{- end }}
       - name: tautulli-config
       {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:
