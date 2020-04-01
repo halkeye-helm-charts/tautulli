@@ -17,7 +17,7 @@ strategy: {}
 
 image:
   repository: tautulli/tautulli
-  tag: v2.2.0
+  tag: "{{ .Chart.AppVersion }}"
   pullPolicy: IfNotPresent
 
 nameOverride: ""
