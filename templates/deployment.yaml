@@ -1,13 +1,15 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "tautulli.fullname" . }}
+  {{- if .Values.deploymentAnnotations }}
+  annotations:
+    {{- range $key, $value := .Values.deploymentAnnotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
   labels:
-    app.kubernetes.io/name: {{ include "tautulli.name" . }}
-    helm.sh/chart: {{ include "tautulli.chart" . }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{ include "tautulli.labels" . | indent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
 {{- if .Values.strategy }}
@@ -19,21 +21,29 @@ spec:
 {{- end }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "tautulli.name" . }}
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "tautulli.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      labels:
+        {{- include "tautulli.selectorLabels" . | nindent 8 }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-      labels:
-        app.kubernetes.io/name: {{ include "tautulli.name" . }}
-        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- range $key, $value := .Values.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
     spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ template "tautulli.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- if .Values.dnsConfig }}
       dnsConfig:
         {{- toYaml .Values.dnsConfig | nindent 8 }}
       {{- end }}
-{{- if (.Values.persistence.enabled) or (.Values.getGeoCity.enabled) }}
+{{- if or .Values.persistence.enabled .Values.getGeoCity.enabled }}
       initContainers:
 {{- if .Values.persistence.enabled }}
         - name: init-chown-data
@@ -62,6 +72,8 @@ spec:
 {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ tpl .Values.image.tag . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
@@ -79,14 +91,25 @@ spec:
             httpGet:
               path: /auth/login
               port: http
-            initialDelaySeconds: 120
-            periodSeconds: 20
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
           readinessProbe:
             httpGet:
               path: /auth/login
               port: http
-            initialDelaySeconds: 120
-            periodSeconds: 20
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+{{- if semverCompare ">=1.16-0" .Capabilities.KubeVersion.GitVersion }}
+          startupProbe:
+            httpGet:
+              path: /auth/login
+              port: http
+            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+{{- end }}
           volumeMounts:
           - name: tautulli-config
             mountPath: /config
@@ -106,11 +129,10 @@ spec:
       - name: tautulli-config
       {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:
-          claimName: {{ template "tautulli.fullname" . }}-config
+          claimName: {{ if .Values.persistence.existingClaim }}{{ .Values.persistence.existingClaim }}{{- else }}{{ template "tautulli.fullname" . }}{{- end }}
       {{- else }}
         emptyDir: {}
       {{- end }}
-
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
